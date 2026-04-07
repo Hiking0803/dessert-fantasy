@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>甜点幻想曲·开心消不停</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="overflow-hidden">
+    <!-- 加载画面 -->
+    <div id="loading-screen" class="screen active">
+        <div class="loading-bg"></div>
+        <div class="loading-content">
+            <div class="loading-title">🍰 甜点幻想曲 🍰</div>
+            <div class="loading-subtitle">开心消不停</div>
+            <div class="loading-bar-container">
+                <div class="loading-bar" id="loading-bar"></div>
+            </div>
+            <div class="loading-text" id="loading-text">正在准备甜蜜世界...</div>
+        </div>
+    </div>
+
+    <!-- 登录界面 -->
+    <div id="login-screen" class="screen">
+        <canvas id="login-bg-canvas"></canvas>
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-logo">🧁</div>
+                <h1 class="login-title">甜点幻想曲</h1>
+                <h2 class="login-subtitle-text">✨ 开心消不停 ✨</h2>
+                <div class="login-form">
+                    <div class="login-input-group">
+                        <span class="login-input-icon">🍪</span>
+                        <input type="text" id="player-name" placeholder="输入你的甜点师名字" maxlength="12" class="login-input">
+                    </div>
+                    <div class="character-select-area">
+                        <p class="character-select-label">选择你的甜点师形象</p>
+                        <div class="character-select-row">
+                            <div class="character-option selected" data-char="boy" id="char-option-boy">
+                                <img src="https://zhiyan-ai-agent-with-1258344702.cos.ap-guangzhou.tencentcos.cn/with/9a885a25-6489-4caa-9e63-c1f37c39dbaa/image_1775546832_1_1.jpg" alt="男孩甜点师" class="character-option-img">
+                                <span class="character-option-name">萌萌</span>
+                                <span class="character-option-check">✔</span>
+                            </div>
+                            <div class="character-option" data-char="girl" id="char-option-girl">
+                                <img src="https://zhiyan-ai-agent-with-1258344702.cos.ap-guangzhou.tencentcos.cn/with/faa7388a-f02e-4d49-953d-0be10af394b6/image_1775546859_2_1.jpg" alt="女孩甜点师" class="character-option-img">
+                                <span class="character-option-name">甜甜</span>
+                                <span class="character-option-check">✔</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="btn-start-game" class="login-btn login-btn-primary">
+                        <span>🎂 开始冒险</span>
+                    </button>
+                </div>
+                <div class="login-tips">
+                    <span>🍬 收集甜品 · 🏆 挑战排行 · ⭐ 成为大师</span>
+                    <br><span style="font-size:11px;opacity:0.7;">数据自动云端同步，换设备也不丢失</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主菜单 -->
+    <div id="menu-screen" class="screen">
+        <canvas id="menu-bg-canvas"></canvas>
+        <div class="menu-container">
+            <div class="menu-header">
+                <div class="player-info-bar">
+                    <div class="player-avatar" id="menu-avatar">🧑‍🍳</div>
+                    <div class="player-details">
+                        <div class="player-name" id="menu-player-name">甜点师</div>
+                        <div class="player-level" id="menu-player-level">Lv.1 见习甜点师</div>
+                    </div>
+                    <div class="player-coins">
+                        <span>🪙</span>
+                        <span id="menu-coins">0</span>
+                    </div>
+                </div>
+            </div>
+            <div class="menu-title-area">
+                <div class="menu-game-title">🍰 甜点幻想曲 🍰</div>
+                <div class="menu-game-subtitle">开心消不停</div>
+            </div>
+            <div class="menu-buttons">
+                <button id="btn-adventure" class="menu-btn menu-btn-adventure">
+                    <span class="menu-btn-icon">🗺️</span>
+                    <span class="menu-btn-text">冒险模式</span>
+                    <span class="menu-btn-desc">挑战甜品大赛</span>
+                </button>
+                <div class="menu-btn-row">
+                    <button id="btn-character" class="menu-btn menu-btn-small">
+                        <span class="menu-btn-icon" id="menu-char-icon">👩‍🍳</span>
+                        <span class="menu-btn-text">角色</span>
+                    </button>
+                    <button id="btn-ranking" class="menu-btn menu-btn-small">
+                        <span class="menu-btn-icon">🏆</span>
+                        <span class="menu-btn-text">排行榜</span>
+                    </button>
+                    <button id="btn-achievements" class="menu-btn menu-btn-small">
+                        <span class="menu-btn-icon">⭐</span>
+                        <span class="menu-btn-text">成就</span>
+                    </button>
+                    <button id="btn-settings" class="menu-btn menu-btn-small">
+                        <span class="menu-btn-icon">⚙️</span>
+                        <span class="menu-btn-text">设置</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 关卡选择 -->
+    <div id="level-screen" class="screen">
+        <div class="level-container">
+            <div class="level-header">
+                <button id="btn-back-menu" class="back-btn">← 返回</button>
+                <h2 class="level-title">🏰 甜蜜王国 · 第一赛区</h2>
+                <div class="level-stars-total">⭐ <span id="total-stars">0</span>/45</div>
+            </div>
+            <div class="level-map" id="level-map"></div>
+        </div>
+    </div>
+
+    <!-- 游戏界面 -->
+    <div id="game-screen" class="screen">
+        <div class="game-container">
+            <div class="game-hud">
+                <div class="hud-left">
+                    <button id="btn-pause" class="hud-btn">⏸️</button>
+                    <div class="hud-level" id="hud-level">关卡 1</div>
+                </div>
+                <div class="hud-center">
+                    <div class="hud-score-container">
+                        <div class="hud-score-label">分数</div>
+                        <div class="hud-score" id="hud-score">0</div>
+                    </div>
+                    <div class="hud-star-bar">
+                        <div class="star-progress" id="star-progress"></div>
+                        <div class="star-markers">
+                            <span class="star-marker" data-star="1">⭐</span>
+                            <span class="star-marker" data-star="2">⭐</span>
+                            <span class="star-marker" data-star="3">⭐</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="hud-right">
+                    <div class="hud-moves-container">
+                        <div class="hud-moves-label">步数</div>
+                        <div class="hud-moves" id="hud-moves">30</div>
+                    </div>
+                </div>
+            </div>
+            <div class="game-objective" id="game-objective">
+                <span class="objective-text">目标：达到 <strong id="target-score">5000</strong> 分</span>
+            </div>
+            <div class="game-board-wrapper">
+                <canvas id="game-canvas"></canvas>
+            </div>
+            <div class="game-tools">
+                <button class="tool-btn" id="tool-shuffle" title="洗牌">🔀<span class="tool-count">3</span></button>
+                <button class="tool-btn" id="tool-hint" title="提示（显示可消除组合）">💡<span class="tool-count" id="hint-count">3</span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 暂停弹窗 -->
+    <div id="pause-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content pause-content">
+            <h2>⏸️ 游戏暂停</h2>
+            <button id="btn-resume" class="modal-btn modal-btn-primary">▶️ 继续游戏</button>
+            <button id="btn-restart" class="modal-btn modal-btn-secondary">🔄 重新开始</button>
+            <button id="btn-quit" class="modal-btn modal-btn-danger">🚪 退出关卡</button>
+        </div>
+    </div>
+
+    <!-- 胜利弹窗 -->
+    <div id="win-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content win-content">
+            <div class="win-title">🎉 关卡通过！</div>
+            <div class="win-stars" id="win-stars"></div>
+            <div class="win-score">得分：<span id="win-score-value">0</span></div>
+            <div class="win-rewards">
+                <span>🪙 +<span id="win-coins">100</span></span>
+                <span>⭐ +<span id="win-star-count">0</span></span>
+            </div>
+            <button id="btn-next-level" class="modal-btn modal-btn-primary">➡️ 下一关</button>
+            <button id="btn-back-levels" class="modal-btn modal-btn-secondary">🗺️ 返回地图</button>
+        </div>
+    </div>
+
+    <!-- 失败弹窗 -->
+    <div id="lose-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content lose-content">
+            <div class="lose-title">😢 挑战失败</div>
+            <div class="lose-message">步数用完了，再试一次吧！</div>
+            <div class="lose-score">得分：<span id="lose-score-value">0</span></div>
+            <button id="btn-retry" class="modal-btn modal-btn-primary">🔄 再试一次</button>
+            <button id="btn-lose-quit" class="modal-btn modal-btn-secondary">🚪 退出关卡</button>
+        </div>
+    </div>
+
+    <!-- 排行榜弹窗 -->
+    <div id="ranking-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content ranking-content">
+            <div class="ranking-header">
+                <h2>🏆 排行榜</h2>
+                <button id="btn-close-ranking" class="close-btn">✕</button>
+            </div>
+            <div class="ranking-tabs">
+                <button class="ranking-tab active" data-tab="score">🎯 总分榜</button>
+                <button class="ranking-tab" data-tab="level">🗺️ 进度榜</button>
+                <button class="ranking-tab" data-tab="stars">⭐ 星星榜</button>
+            </div>
+            <div class="ranking-list" id="ranking-list"></div>
+        </div>
+    </div>
+
+    <!-- 角色弹窗 -->
+    <div id="character-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content character-content">
+            <div class="character-header">
+                <h2>👩‍🍳 我的角色</h2>
+                <button id="btn-close-character" class="close-btn">✕</button>
+            </div>
+            <div class="character-info">
+                <div class="character-avatar-large" id="char-avatar">
+                    <img id="char-avatar-img" src="" alt="角色形象" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                </div>
+                <div class="character-select-row" style="margin-bottom:12px;">
+                    <div class="character-option-mini" data-char="boy" id="char-switch-boy">
+                        <img src="https://zhiyan-ai-agent-with-1258344702.cos.ap-guangzhou.tencentcos.cn/with/9a885a25-6489-4caa-9e63-c1f37c39dbaa/image_1775546832_1_1.jpg" alt="萌萌" class="character-option-img-mini">
+                        <span>萌萌</span>
+                    </div>
+                    <div class="character-option-mini" data-char="girl" id="char-switch-girl">
+                        <img src="https://zhiyan-ai-agent-with-1258344702.cos.ap-guangzhou.tencentcos.cn/with/faa7388a-f02e-4d49-953d-0be10af394b6/image_1775546859_2_1.jpg" alt="甜甜" class="character-option-img-mini">
+                        <span>甜甜</span>
+                    </div>
+                </div>
+                <div class="character-name-edit">
+                    <input type="text" id="char-name-input" class="char-name-input" maxlength="12">
+                    <button id="btn-save-name" class="save-name-btn">保存</button>
+                </div>
+                <div class="character-stats">
+                    <div class="stat-item"><span class="stat-label">等级</span><span class="stat-value" id="char-level">1</span></div>
+                    <div class="stat-item"><span class="stat-label">经验</span><span class="stat-value" id="char-exp">0/100</span></div>
+                    <div class="stat-item"><span class="stat-label">金币</span><span class="stat-value" id="char-coins">0</span></div>
+                    <div class="stat-item"><span class="stat-label">通关数</span><span class="stat-value" id="char-cleared">0</span></div>
+                    <div class="stat-item"><span class="stat-label">总星数</span><span class="stat-value" id="char-stars">0</span></div>
+                    <div class="stat-item"><span class="stat-label">最高连击</span><span class="stat-value" id="char-combo">0</span></div>
+                </div>
+            </div>
+            <div class="character-titles">
+                <h3>🎖️ 称号</h3>
+                <div class="titles-list" id="titles-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 成就弹窗 -->
+    <div id="achievement-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content achievement-content">
+            <div class="achievement-header">
+                <h2>⭐ 成就</h2>
+                <button id="btn-close-achievement" class="close-btn">✕</button>
+            </div>
+            <div class="achievement-list" id="achievement-list"></div>
+        </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content settings-content">
+            <div class="settings-header">
+                <h2>⚙️ 设置</h2>
+                <button id="btn-close-settings" class="close-btn">✕</button>
+            </div>
+            <div class="settings-list">
+                <div class="setting-item">
+                    <span>🔊 音效</span>
+                    <label class="toggle"><input type="checkbox" id="setting-sfx" checked><span class="toggle-slider"></span></label>
+                </div>
+                <div class="setting-item">
+                    <span>🎵 音乐</span>
+                    <label class="toggle"><input type="checkbox" id="setting-music" checked><span class="toggle-slider"></span></label>
+                </div>
+                <div class="setting-item">
+                    <span>📳 振动</span>
+                    <label class="toggle"><input type="checkbox" id="setting-vibrate" checked><span class="toggle-slider"></span></label>
+                </div>
+                <div class="setting-item">
+                    <span>🎨 粒子特效</span>
+                    <label class="toggle"><input type="checkbox" id="setting-particles" checked><span class="toggle-slider"></span></label>
+                </div>
+            </div>
+            <div class="settings-footer">
+                <button id="btn-clear-data" class="modal-btn modal-btn-danger">🗑️ 清除存档</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 玩法介绍弹窗 -->
+    <div id="tutorial-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content tutorial-content">
+            <div class="tutorial-header">
+                <h2>📖 玩法介绍</h2>
+                <button id="btn-close-tutorial" class="close-btn">✕</button>
+            </div>
+            <div class="tutorial-pages" id="tutorial-pages">
+                <div class="tutorial-page active" data-page="0">
+                    <div class="tutorial-emoji">🍰🍮🍩🧁🍦🍫</div>
+                    <h3>基础玩法</h3>
+                    <p>在棋盘上<strong>交换相邻的甜品</strong>，使<strong>3个或更多</strong>相同甜品连成一线即可消除。</p>
+                    <p>每关有限定步数，在步数用完前达到目标分数即可过关！</p>
+                </div>
+                <div class="tutorial-page" data-page="1">
+                    <div class="tutorial-emoji">✨ 四连特效 ✨</div>
+                    <h3>🍬 糖霜喷射器</h3>
+                    <p><strong>4个</strong>相同甜品连成直线，生成<strong>糖霜喷射器</strong>。</p>
+                    <p>点击或匹配激活后，可消除<strong>整行或整列</strong>的甜品！</p>
+                    <div class="tutorial-hint">💡 横向四连生成纵向喷射，纵向四连生成横向喷射</div>
+                </div>
+                <div class="tutorial-page" data-page="2">
+                    <div class="tutorial-emoji">💥 五连特效 💥</div>
+                    <h3>🧁 奶油爆弹 & 🌟 万能味觉精灵</h3>
+                    <p><strong>L/T型</strong>五连 → 生成<strong>奶油爆弹</strong>，激活后消除周围大范围甜品！</p>
+                    <p><strong>直线</strong>五连 → 生成<strong>万能味觉精灵</strong>，与任意甜品交换可消除全场同色！</p>
+                    <div class="tutorial-hint">💡 特殊甜品可以<strong>双击</strong>激活哦！</div>
+                </div>
+                <div class="tutorial-page" data-page="3">
+                    <div class="tutorial-emoji">🌪️ 终极组合技 🌪️</div>
+                    <h3>甜蜜风暴</h3>
+                    <p>将两个<strong>特殊甜品</strong>相邻交换，触发<strong>超强组合技</strong>！</p>
+                    <p>🍬+💥 或 🍬+🌟 或 💥+🌟 → <strong>甜蜜风暴</strong>，全屏消除！</p>
+                    <div class="tutorial-hint">🏆 善用组合技，轻松拿高分！</div>
+                </div>
+            </div>
+            <div class="tutorial-dots" id="tutorial-dots">
+                <span class="tutorial-dot active" data-dot="0"></span>
+                <span class="tutorial-dot" data-dot="1"></span>
+                <span class="tutorial-dot" data-dot="2"></span>
+                <span class="tutorial-dot" data-dot="3"></span>
+            </div>
+            <div class="tutorial-nav">
+                <button id="btn-tutorial-prev" class="modal-btn modal-btn-secondary" style="display:none;">← 上一页</button>
+                <button id="btn-tutorial-next" class="modal-btn modal-btn-primary">下一页 →</button>
+                <button id="btn-tutorial-start" class="modal-btn modal-btn-primary" style="display:none;">🎮 开始游戏！</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
