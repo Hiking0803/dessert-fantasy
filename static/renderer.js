@@ -283,24 +283,27 @@ export class GameRenderer {
 
     // 绘制棋盘背景
     drawBoardBackground(ctx, w, h) {
-        // 华夫格背景
-        ctx.fillStyle = 'rgba(139, 90, 43, 0.15)';
-        ctx.fillRect(0, 0, w, h);
+        // 整体棋盘底色 - 柔和的奶油色，不使用半透明叠加
+        ctx.fillStyle = '#fef6e8';
+        ctx.beginPath();
+        ctx.roundRect(0, 0, w, h, 12);
+        ctx.fill();
 
         for (let r = 0; r < this.boardSize; r++) {
             for (let c = 0; c < this.boardSize; c++) {
                 const x = this.boardX + c * this.cellSize;
                 const y = this.boardY + r * this.cellSize;
                 const isLight = (r + c) % 2 === 0;
+                const gap = 1.5;
 
-                // 格子背景
-                ctx.fillStyle = isLight ? 'rgba(255, 248, 225, 0.6)' : 'rgba(255, 236, 179, 0.6)';
+                // 格子背景 - 使用不透明的柔和色，清晰无雾感
+                ctx.fillStyle = isLight ? '#fff8f0' : '#ffefd5';
                 ctx.beginPath();
-                ctx.roundRect(x + 1, y + 1, this.cellSize - 2, this.cellSize - 2, 4);
+                ctx.roundRect(x + gap, y + gap, this.cellSize - gap * 2, this.cellSize - gap * 2, 6);
                 ctx.fill();
 
-                // 格子边框
-                ctx.strokeStyle = 'rgba(188, 143, 85, 0.2)';
+                // 格子内阴影 - 轻微的立体感
+                ctx.strokeStyle = 'rgba(210, 180, 140, 0.25)';
                 ctx.lineWidth = 0.5;
                 ctx.stroke();
             }
@@ -335,19 +338,12 @@ export class GameRenderer {
             ctx.translate(0, bounce);
         }
 
-        // 绘制彩色背景圆圈 - 仅普通元素使用淡色背景，特殊元素不绘制（由发光效果替代）
-        if (cell.type >= 0 && cell.type < CANDY_COLORS.length && cell.special === SPECIAL_TYPES.NONE) {
-            const bgRadius = this.cellSize * 0.36;
-            ctx.beginPath();
-            ctx.arc(0, 0, bgRadius, 0, Math.PI * 2);
-            ctx.fillStyle = CANDY_COLORS[cell.type][1] + '40';
-            ctx.fill();
-        }
+        // 不再绘制背景圆圈，直接绘制emoji，保持清晰无遮挡
 
-        // 绘制甜品emoji - 大格子用0.55，小格子(10×10)用0.65确保清晰
-        const emojiRatio = this.boardSize >= 10 ? 0.65 : 0.58;
-        const fontSize = Math.max(16, Math.floor(this.cellSize * emojiRatio));
-        ctx.font = `${fontSize}px serif`;
+        // 绘制甜品emoji - 增大比例，让元素更大更清晰
+        const emojiRatio = this.boardSize >= 10 ? 0.72 : 0.68;
+        const fontSize = Math.max(18, Math.floor(this.cellSize * emojiRatio));
+        ctx.font = `${fontSize}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
@@ -362,22 +358,22 @@ export class GameRenderer {
             const rainbowScale = 1.15 + Math.sin(Date.now() * 0.005) * 0.08;
             ctx.scale(rainbowScale, rainbowScale);
             ctx.shadowColor = `hsl(${hue}, 100%, 60%)`;
-            ctx.shadowBlur = 20;
+            ctx.shadowBlur = 15;
             ctx.fillText('🌟', 0, 0);
             ctx.shadowBlur = 0;
             ctx.restore();
         } else if (cell.special === SPECIAL_TYPES.LINE_H || cell.special === SPECIAL_TYPES.LINE_V) {
-            // 糖霜喷射器 - 金色边框 + 放大脉冲
+            // 糖霜喷射器 - 金色光晕 + 放大脉冲
             const lineScale = 1.05 + Math.sin(Date.now() * 0.006) * 0.06;
             ctx.save();
             ctx.scale(lineScale, lineScale);
             ctx.shadowColor = '#ffd700';
-            ctx.shadowBlur = 18;
+            ctx.shadowBlur = 12;
             ctx.fillText(CANDY_EMOJIS[cell.type] || '🍬', 0, 0);
             ctx.shadowBlur = 0;
             ctx.restore();
             // 方向箭头标记 - 更大更醒目
-            ctx.font = `bold ${Math.max(10, Math.floor(fontSize * markerRatio))}px serif`;
+            ctx.font = `bold ${Math.max(10, Math.floor(fontSize * markerRatio))}px "Apple Color Emoji","Segoe UI Emoji",serif`;
             const arrowAlpha = 0.7 + Math.sin(Date.now() * 0.008) * 0.3;
             ctx.globalAlpha = arrowAlpha * alpha;
             ctx.fillText(cell.special === SPECIAL_TYPES.LINE_H ? '↔️' : '↕️', size * 0.85, -size * 0.65);
@@ -388,64 +384,38 @@ export class GameRenderer {
             ctx.save();
             ctx.scale(bombScale, bombScale);
             ctx.shadowColor = '#ff4444';
-            ctx.shadowBlur = 20;
+            ctx.shadowBlur = 14;
             ctx.fillText(CANDY_EMOJIS[cell.type] || '🍬', 0, 0);
             ctx.shadowBlur = 0;
             ctx.restore();
             // 爆炸标记 - 更大更醒目
-            ctx.font = `${Math.max(10, Math.floor(fontSize * markerRatio))}px serif`;
+            ctx.font = `${Math.max(10, Math.floor(fontSize * markerRatio))}px "Apple Color Emoji","Segoe UI Emoji",serif`;
             const bombAlpha = 0.7 + Math.sin(Date.now() * 0.008) * 0.3;
             ctx.globalAlpha = bombAlpha * alpha;
             ctx.fillText('💥', size * 0.85, -size * 0.65);
             ctx.globalAlpha = alpha;
         } else {
-            // 普通甜品 - 无额外效果
+            // 普通甜品 - 添加轻微投影增加立体感，不使用模糊背景
+            ctx.shadowColor = 'rgba(0,0,0,0.15)';
+            ctx.shadowBlur = 3;
+            ctx.shadowOffsetY = 1;
             ctx.fillText(CANDY_EMOJIS[cell.type] || '🍬', 0, 0);
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
         }
 
         ctx.restore();
     }
 
-    // 绘制特殊元素发光 - 增强版，更醒目
+    // 绘制特殊元素发光 - 精致版，清晰醒目不模糊
     drawSpecialGlow(ctx, special, size) {
         const time = Date.now() * 0.004;
         const pulse = 0.5 + Math.sin(time) * 0.3;
-        const fastPulse = 0.6 + Math.sin(time * 2) * 0.4;
 
         switch (special) {
             case SPECIAL_TYPES.LINE_H:
             case SPECIAL_TYPES.LINE_V: {
-                // 糖霜喷射器 - 金色脉冲光环 + 旋转光线
-                const glowSize = size * 1.8 * (1 + Math.sin(time) * 0.1);
-                // 外层大光晕
-                const grad1 = ctx.createRadialGradient(0, 0, size * 0.3, 0, 0, glowSize);
-                grad1.addColorStop(0, `rgba(255, 215, 0, ${0.6 * fastPulse})`);
-                grad1.addColorStop(0.5, `rgba(255, 165, 0, ${0.3 * fastPulse})`);
-                grad1.addColorStop(1, 'rgba(255, 215, 0, 0)');
-                ctx.beginPath();
-                ctx.arc(0, 0, glowSize, 0, Math.PI * 2);
-                ctx.fillStyle = grad1;
-                ctx.fill();
-                // 方向指示光线
-                ctx.save();
-                ctx.globalAlpha = 0.4 + Math.sin(time * 1.5) * 0.3;
-                ctx.strokeStyle = '#ffd700';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([4, 4]);
-                ctx.lineDashOffset = -Date.now() * 0.02;
-                if (special === SPECIAL_TYPES.LINE_H) {
-                    ctx.beginPath();
-                    ctx.moveTo(-size * 2.5, 0);
-                    ctx.lineTo(size * 2.5, 0);
-                    ctx.stroke();
-                } else {
-                    ctx.beginPath();
-                    ctx.moveTo(0, -size * 2.5);
-                    ctx.lineTo(0, size * 2.5);
-                    ctx.stroke();
-                }
-                ctx.setLineDash([]);
-                ctx.restore();
+                // 糖霜喷射器 - 金色旋转菱形 + 方向指示线
                 // 旋转菱形边框
                 ctx.save();
                 ctx.rotate(time * 0.5);
@@ -457,43 +427,51 @@ export class GameRenderer {
                 ctx.closePath();
                 ctx.stroke();
                 ctx.restore();
+                // 方向指示光线
+                ctx.save();
+                ctx.globalAlpha = 0.35 + Math.sin(time * 1.5) * 0.25;
+                ctx.strokeStyle = '#ffd700';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([3, 3]);
+                ctx.lineDashOffset = -Date.now() * 0.02;
+                if (special === SPECIAL_TYPES.LINE_H) {
+                    ctx.beginPath();
+                    ctx.moveTo(-size * 2.2, 0);
+                    ctx.lineTo(size * 2.2, 0);
+                    ctx.stroke();
+                } else {
+                    ctx.beginPath();
+                    ctx.moveTo(0, -size * 2.2);
+                    ctx.lineTo(0, size * 2.2);
+                    ctx.stroke();
+                }
+                ctx.setLineDash([]);
+                ctx.restore();
                 break;
             }
             case SPECIAL_TYPES.BOMB: {
-                // 奶油爆弹 - 红色脉冲 + 爆炸波纹
-                const bombSize = size * 2.0 * (1 + Math.sin(time * 1.5) * 0.15);
-                // 内层红色光晕
-                const grad2 = ctx.createRadialGradient(0, 0, size * 0.2, 0, 0, bombSize);
-                grad2.addColorStop(0, `rgba(255, 50, 50, ${0.7 * fastPulse})`);
-                grad2.addColorStop(0.4, `rgba(255, 100, 50, ${0.4 * fastPulse})`);
-                grad2.addColorStop(0.7, `rgba(255, 150, 0, ${0.2 * fastPulse})`);
-                grad2.addColorStop(1, 'rgba(255, 50, 50, 0)');
-                ctx.beginPath();
-                ctx.arc(0, 0, bombSize, 0, Math.PI * 2);
-                ctx.fillStyle = grad2;
-                ctx.fill();
-                // 扩散波纹
+                // 奶油爆弹 - 扩散波纹 + 十字标记
                 const wavePhase = (Date.now() * 0.002) % 1;
                 const waveR = size * (1.0 + wavePhase * 1.5);
                 ctx.beginPath();
                 ctx.arc(0, 0, waveR, 0, Math.PI * 2);
-                ctx.strokeStyle = `rgba(255, 80, 80, ${(1 - wavePhase) * 0.6})`;
+                ctx.strokeStyle = `rgba(255, 80, 80, ${(1 - wavePhase) * 0.5})`;
                 ctx.lineWidth = 2;
                 ctx.stroke();
-                // 第二层波纹（错开相位）
+                // 第二层波纹
                 const wavePhase2 = ((Date.now() * 0.002) + 0.5) % 1;
                 const waveR2 = size * (1.0 + wavePhase2 * 1.5);
                 ctx.beginPath();
                 ctx.arc(0, 0, waveR2, 0, Math.PI * 2);
-                ctx.strokeStyle = `rgba(255, 150, 0, ${(1 - wavePhase2) * 0.4})`;
+                ctx.strokeStyle = `rgba(255, 150, 0, ${(1 - wavePhase2) * 0.35})`;
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
                 // 十字标记
                 ctx.save();
-                ctx.globalAlpha = 0.5 + Math.sin(time * 2) * 0.3;
+                ctx.globalAlpha = 0.4 + Math.sin(time * 2) * 0.25;
                 ctx.strokeStyle = '#ff4444';
-                ctx.lineWidth = 2;
-                const cs = size * 1.2;
+                ctx.lineWidth = 1.5;
+                const cs = size * 1.1;
                 ctx.beginPath();
                 ctx.moveTo(-cs, 0); ctx.lineTo(cs, 0);
                 ctx.moveTo(0, -cs); ctx.lineTo(0, cs);
@@ -502,19 +480,8 @@ export class GameRenderer {
                 break;
             }
             case SPECIAL_TYPES.RAINBOW: {
-                // 万能味觉精灵 - 彩虹旋转光环
+                // 万能味觉精灵 - 彩虹旋转弧线 + 闪烁星星
                 const hue = (Date.now() * 0.15) % 360;
-                const rainbowSize = size * 2.2 * (1 + Math.sin(time) * 0.1);
-                // 彩虹渐变光晕
-                const grad3 = ctx.createRadialGradient(0, 0, size * 0.3, 0, 0, rainbowSize);
-                grad3.addColorStop(0, `hsla(${hue}, 100%, 70%, 0.7)`);
-                grad3.addColorStop(0.3, `hsla(${(hue + 60) % 360}, 100%, 60%, 0.4)`);
-                grad3.addColorStop(0.6, `hsla(${(hue + 120) % 360}, 100%, 60%, 0.2)`);
-                grad3.addColorStop(1, 'rgba(255, 255, 255, 0)');
-                ctx.beginPath();
-                ctx.arc(0, 0, rainbowSize, 0, Math.PI * 2);
-                ctx.fillStyle = grad3;
-                ctx.fill();
                 // 旋转彩虹弧线
                 ctx.save();
                 const arcCount = 6;
@@ -523,8 +490,8 @@ export class GameRenderer {
                     const startAngle = time + (Math.PI * 2 * i / arcCount);
                     ctx.beginPath();
                     ctx.arc(0, 0, size * 1.5, startAngle, startAngle + Math.PI / 3);
-                    ctx.strokeStyle = `hsla(${arcHue}, 100%, 60%, ${0.6 + Math.sin(time + i) * 0.3})`;
-                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = `hsla(${arcHue}, 100%, 60%, ${0.5 + Math.sin(time + i) * 0.25})`;
+                    ctx.lineWidth = 2.5;
                     ctx.stroke();
                 }
                 ctx.restore();
@@ -532,11 +499,11 @@ export class GameRenderer {
                 ctx.save();
                 for (let i = 0; i < 4; i++) {
                     const angle = time * 0.8 + (Math.PI * 2 * i / 4);
-                    const dist = size * 1.6;
+                    const dist = size * 1.5;
                     const sx = Math.cos(angle) * dist;
                     const sy = Math.sin(angle) * dist;
-                    const starSize = 3 + Math.sin(time * 3 + i) * 1.5;
-                    ctx.fillStyle = `hsla(${(hue + i * 90) % 360}, 100%, 80%, ${0.7 + Math.sin(time * 2 + i) * 0.3})`;
+                    const starSize = 2.5 + Math.sin(time * 3 + i) * 1.2;
+                    ctx.fillStyle = `hsla(${(hue + i * 90) % 360}, 100%, 75%, ${0.6 + Math.sin(time * 2 + i) * 0.3})`;
                     ctx.beginPath();
                     ctx.arc(sx, sy, starSize, 0, Math.PI * 2);
                     ctx.fill();
@@ -580,7 +547,7 @@ export class GameRenderer {
         // 石头emoji - 大棋盘时增大比例
         const stoneRatio = this.boardSize >= 10 ? 0.55 : 0.45;
         const fontSize = Math.max(14, Math.floor(this.cellSize * stoneRatio));
-        ctx.font = `${fontSize}px serif`;
+        ctx.font = `${fontSize}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('🪨', 0, 0);
@@ -588,7 +555,7 @@ export class GameRenderer {
         ctx.restore();
     }
 
-    // 绘制冰块覆盖层
+    // 绘制冰块覆盖层 - 轻薄透明，不遮挡甜品
     drawIce(ctx, row, col) {
         const pos = this.getCellPos(row, col);
         const size = this.cellSize * 0.46;
@@ -597,41 +564,33 @@ export class GameRenderer {
         ctx.save();
         ctx.translate(pos.x, pos.y);
 
-        // 冰块半透明覆盖
-        const iceGrad = ctx.createRadialGradient(0, 0, size * 0.1, 0, 0, size);
-        iceGrad.addColorStop(0, 'rgba(200, 230, 255, 0.15)');
-        iceGrad.addColorStop(0.5, 'rgba(150, 210, 255, 0.3)');
-        iceGrad.addColorStop(1, 'rgba(100, 180, 255, 0.4)');
+        // 冰块边框 - 用边框而非填充来表示冰冻，减少遮挡
+        ctx.strokeStyle = `rgba(80, 180, 255, ${0.6 + Math.sin(time) * 0.2})`;
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.roundRect(-size, -size, size * 2, size * 2, 6);
-        ctx.fillStyle = iceGrad;
-        ctx.fill();
-
-        // 冰块边框
-        ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 + Math.sin(time) * 0.2})`;
-        ctx.lineWidth = 2.5;
         ctx.stroke();
 
-        // 冰裂纹
-        ctx.strokeStyle = 'rgba(200, 230, 255, 0.5)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(-size * 0.3, -size * 0.5);
-        ctx.lineTo(size * 0.1, 0);
-        ctx.lineTo(-size * 0.2, size * 0.4);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(size * 0.1, 0);
-        ctx.lineTo(size * 0.5, size * 0.2);
-        ctx.stroke();
+        // 四角冰晶装饰
+        ctx.strokeStyle = 'rgba(150, 220, 255, 0.6)';
+        ctx.lineWidth = 1.5;
+        const cs = size * 0.3;
+        // 左上
+        ctx.beginPath(); ctx.moveTo(-size, -size + cs); ctx.lineTo(-size, -size); ctx.lineTo(-size + cs, -size); ctx.stroke();
+        // 右上
+        ctx.beginPath(); ctx.moveTo(size - cs, -size); ctx.lineTo(size, -size); ctx.lineTo(size, -size + cs); ctx.stroke();
+        // 右下
+        ctx.beginPath(); ctx.moveTo(size, size - cs); ctx.lineTo(size, size); ctx.lineTo(size - cs, size); ctx.stroke();
+        // 左下
+        ctx.beginPath(); ctx.moveTo(-size + cs, size); ctx.lineTo(-size, size); ctx.lineTo(-size, size - cs); ctx.stroke();
 
-        // 冰块角标 - 大棋盘时增大比例
+        // 冰块角标
         const iceRatio = this.boardSize >= 10 ? 0.28 : 0.22;
-        ctx.font = `${Math.max(10, Math.floor(this.cellSize * iceRatio))}px serif`;
+        ctx.font = `${Math.max(10, Math.floor(this.cellSize * iceRatio))}px "Apple Color Emoji","Segoe UI Emoji",serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.globalAlpha = 0.8;
-        ctx.fillText('🧊', size * 0.6, -size * 0.6);
+        ctx.globalAlpha = 0.85;
+        ctx.fillText('🧊', size * 0.65, -size * 0.65);
 
         ctx.restore();
     }
