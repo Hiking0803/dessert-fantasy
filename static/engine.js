@@ -18,6 +18,13 @@ export const SPECIAL_TYPES = {
     RAINBOW: 4,   // 万能味觉精灵（五连直线）
 };
 
+// 障碍物类型
+export const OBSTACLE_TYPES = {
+    NONE: 0,
+    ICE: 1,       // 冰块 - 覆盖在甜品上，需要消除旁边的甜品来破冰（消除1次破冰）
+    STONE: 2,     // 石头 - 不可移动，不可消除，占据格子
+};
+
 export const BOARD_SIZE = 10;
 
 // 根据关卡ID获取棋盘大小：1-3关6×6，4-9关8×8，10+关10×10
@@ -35,10 +42,11 @@ export function getCandyCountForLevel(levelId) {
 }
 
 // 创建一个棋盘格子
-export function createCell(type = -1, special = SPECIAL_TYPES.NONE) {
+export function createCell(type = -1, special = SPECIAL_TYPES.NONE, obstacle = OBSTACLE_TYPES.NONE) {
     return {
         type,       // 甜品类型 0-5, -1表示空
         special,    // 特殊类型
+        obstacle,   // 障碍物类型
         row: 0,
         col: 0,
         x: 0, y: 0,           // 渲染位置
@@ -113,7 +121,59 @@ export class GameEngine {
             this.ensureValidMoves();
         }
 
+        // 放置障碍物
+        if (levelConfig?.obstacles) {
+            this.placeObstacles(levelConfig.obstacles);
+        }
+
         return this.board;
+    }
+
+    // 放置障碍物
+    placeObstacles(obstacleConfig) {
+        const positions = [];
+        // 收集可放置障碍物的位置（避免边角和中心区域，保证可玩性）
+        for (let r = 1; r < this.size - 1; r++) {
+            for (let c = 1; c < this.size - 1; c++) {
+                // 避免正中心3x3区域
+                const centerR = Math.floor(this.size / 2);
+                const centerC = Math.floor(this.size / 2);
+                if (Math.abs(r - centerR) <= 1 && Math.abs(c - centerC) <= 1) continue;
+                positions.push({ r, c });
+            }
+        }
+
+        // 随机打乱位置
+        for (let i = positions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [positions[i], positions[j]] = [positions[j], positions[i]];
+        }
+
+        let posIdx = 0;
+
+        // 放置冰块（覆盖在甜品上）
+        if (obstacleConfig.ice) {
+            for (let i = 0; i < obstacleConfig.ice && posIdx < positions.length; i++) {
+                const pos = positions[posIdx++];
+                this.board[pos.r][pos.c].obstacle = OBSTACLE_TYPES.ICE;
+            }
+        }
+
+        // 放置石头（替换甜品）
+        if (obstacleConfig.stone) {
+            for (let i = 0; i < obstacleConfig.stone && posIdx < positions.length; i++) {
+                const pos = positions[posIdx++];
+                const cell = createCell(-3, SPECIAL_TYPES.NONE, OBSTACLE_TYPES.STONE);
+                cell.row = pos.r;
+                cell.col = pos.c;
+                this.board[pos.r][pos.c] = cell;
+            }
+        }
+
+        // 确保放置障碍物后仍有可用移动
+        if (!this.hasValidMoves()) {
+            this.ensureValidMoves();
+        }
     }
 
     // 确保棋盘有可用移动（强制创建至少一个可消除组合）
@@ -178,16 +238,32 @@ export class GameEngine {
         if (!this.isAdjacent(r1, c1, r2, c2)) return false;
         const cell1 = this.board[r1][c1];
         const cell2 = this.board[r2][c2];
-        if (cell1.type < 0 || cell2.type < 0) return false;
+        if (cell1.type < 0 && cell1.type !== -2) return false;
+        if (cell2.type < 0 && cell2.type !== -2) return false;
+        // 石头不可交换
+        if (cell1.obstacle === OBSTACLE_TYPES.STONE || cell2.obstacle === OBSTACLE_TYPES.STONE) return false;
+        // 冰块覆盖的甜品不可交换
+        if (cell1.obstacle === OBSTACLE_TYPES.ICE || cell2.obstacle === OBSTACLE_TYPES.ICE) return false;
 
-        // 检查组合技：特殊+特殊
+        // 检查组合技：两个特殊元素交换（包括相同类型的特殊元素）
         const comboResult = this.checkSpecialCombo(cell1, cell2);
         if (comboResult) {
+            // 记录交换前的位置，因为swap后row/col会变
+            const pos1 = { row: r1, col: c1 };
+            const pos2 = { row: r2, col: c2 };
             this.swap(r1, c1, r2, c2);
-            return { type: 'combo', combo: comboResult, cells: [cell1, cell2] };
+            return { type: 'combo', combo: comboResult, cells: [cell1, cell2], positions: [pos1, pos2] };
         }
 
-        // 万能味觉精灵特殊处理
+        // 如果两个都是特殊元素（即使checkSpecialCombo没有匹配到），也允许交换并触发各自效果
+        if (cell1.special !== SPECIAL_TYPES.NONE && cell2.special !== SPECIAL_TYPES.NONE) {
+            const pos1 = { row: r1, col: c1 };
+            const pos2 = { row: r2, col: c2 };
+            this.swap(r1, c1, r2, c2);
+            return { type: 'combo', combo: 'dual_special', cells: [cell1, cell2], positions: [pos1, pos2] };
+        }
+
+        // 万能味觉精灵特殊处理（一个是RAINBOW，另一个是普通元素）
         if (cell1.special === SPECIAL_TYPES.RAINBOW || cell2.special === SPECIAL_TYPES.RAINBOW) {
             this.swap(r1, c1, r2, c2);
             const rainbow = cell1.special === SPECIAL_TYPES.RAINBOW ? this.board[r2][c2] : this.board[r1][c1];
@@ -195,6 +271,7 @@ export class GameEngine {
             return { type: 'rainbow', rainbow, target: other };
         }
 
+        // 单个特殊元素与普通元素交换 - 允许交换（只要能形成匹配或特殊元素本身就有效果）
         // 普通交换
         this.swap(r1, c1, r2, c2);
         const matches = this.findAllMatches();
@@ -252,9 +329,9 @@ export class GameEngine {
         for (let r = 0; r < this.size; r++) {
             for (let c = 0; c < this.size - 2; c++) {
                 const type = this.board[r][c].type;
-                if (type < 0) continue;
+                if (type < 0 || this.board[r][c].obstacle === OBSTACLE_TYPES.STONE) continue;
                 let len = 1;
-                while (c + len < this.size && this.board[r][c + len].type === type) len++;
+                while (c + len < this.size && this.board[r][c + len].type === type && this.board[r][c + len].obstacle !== OBSTACLE_TYPES.STONE) len++;
                 if (len >= 3) {
                     const match = { cells: [], direction: 'horizontal', length: len };
                     for (let i = 0; i < len; i++) {
@@ -271,9 +348,9 @@ export class GameEngine {
         for (let c = 0; c < this.size; c++) {
             for (let r = 0; r < this.size - 2; r++) {
                 const type = this.board[r][c].type;
-                if (type < 0) continue;
+                if (type < 0 || this.board[r][c].obstacle === OBSTACLE_TYPES.STONE) continue;
                 let len = 1;
-                while (r + len < this.size && this.board[r + len][c].type === type) len++;
+                while (r + len < this.size && this.board[r + len][c].type === type && this.board[r + len][c].obstacle !== OBSTACLE_TYPES.STONE) len++;
                 if (len >= 3) {
                     const match = { cells: [], direction: 'vertical', length: len };
                     for (let i = 0; i < len; i++) {
@@ -383,7 +460,7 @@ export class GameEngine {
         return specials;
     }
 
-    // 执行消除
+    // 执行消除 - 支持特殊元素被动触发和链式触发
     executeMatches(matches) {
         const cellsToRemove = new Set();
         for (const match of matches) {
@@ -393,38 +470,90 @@ export class GameEngine {
         }
 
         const removed = [];
+        const iceBroken = []; // 被破冰的格子
+        const triggeredSpecials = new Set(); // 已触发的特殊元素，防止无限递归
+
+        // 先收集所有需要消除的格子
         cellsToRemove.forEach(key => {
             const [r, c] = key.split(',').map(Number);
             const cell = this.board[r][c];
             if (cell.type >= 0 || cell.special === SPECIAL_TYPES.RAINBOW) {
                 removed.push({ ...cell, row: r, col: c });
-                // 如果被消除的是特殊元素，触发其效果
-                if (cell.special !== SPECIAL_TYPES.NONE) {
-                    this.triggerSpecialEffect(cell, removed);
-                }
             }
         });
+
+        // 然后触发所有特殊元素的效果（包括链式触发）
+        let hasNewSpecials = true;
+        while (hasNewSpecials) {
+            hasNewSpecials = false;
+            const currentRemoved = [...removed]; // 复制当前列表
+            for (const cell of currentRemoved) {
+                const key = `${cell.row},${cell.col}`;
+                if (triggeredSpecials.has(key)) continue;
+                if (cell.special && cell.special !== SPECIAL_TYPES.NONE) {
+                    triggeredSpecials.add(key);
+                    const newEffects = this.triggerSpecialEffect(cell, removed);
+                    if (newEffects && newEffects.length > 0) {
+                        hasNewSpecials = true; // 有新的格子被加入，可能包含新的特殊元素
+                    }
+                }
+            }
+        }
+
+        // 检查被消除格子的相邻格子，如果有冰块则破冰
+        const checkedIce = new Set();
+        for (const cell of removed) {
+            const neighbors = [
+                { r: cell.row - 1, c: cell.col },
+                { r: cell.row + 1, c: cell.col },
+                { r: cell.row, c: cell.col - 1 },
+                { r: cell.row, c: cell.col + 1 },
+            ];
+            for (const n of neighbors) {
+                const key = `${n.r},${n.c}`;
+                if (checkedIce.has(key)) continue;
+                checkedIce.add(key);
+                if (n.r >= 0 && n.r < this.size && n.c >= 0 && n.c < this.size) {
+                    const neighbor = this.board[n.r][n.c];
+                    if (neighbor.obstacle === OBSTACLE_TYPES.ICE) {
+                        neighbor.obstacle = OBSTACLE_TYPES.NONE; // 破冰
+                        iceBroken.push({ row: n.r, col: n.c });
+                    }
+                }
+            }
+        }
+
+        // 将破冰信息附加到返回结果
+        removed.iceBroken = iceBroken;
 
         return removed;
     }
 
-    // 触发特殊元素效果
+    // 触发特殊元素效果（被动消除时也会调用）
     triggerSpecialEffect(cell, removed) {
         const effects = [];
         switch (cell.special) {
             case SPECIAL_TYPES.LINE_H:
                 // 消除整行
                 for (let c = 0; c < this.size; c++) {
-                    if (this.board[cell.row][c].type >= 0) {
+                    if (this.board[cell.row][c].obstacle === OBSTACLE_TYPES.STONE) continue;
+                    if (this.board[cell.row][c].type >= 0 || this.board[cell.row][c].type === -2) {
                         effects.push({ row: cell.row, col: c });
+                    }
+                    if (this.board[cell.row][c].obstacle === OBSTACLE_TYPES.ICE) {
+                        this.board[cell.row][c].obstacle = OBSTACLE_TYPES.NONE;
                     }
                 }
                 break;
             case SPECIAL_TYPES.LINE_V:
                 // 消除整列
                 for (let r = 0; r < this.size; r++) {
-                    if (this.board[r][cell.col].type >= 0) {
+                    if (this.board[r][cell.col].obstacle === OBSTACLE_TYPES.STONE) continue;
+                    if (this.board[r][cell.col].type >= 0 || this.board[r][cell.col].type === -2) {
                         effects.push({ row: r, col: cell.col });
+                    }
+                    if (this.board[r][cell.col].obstacle === OBSTACLE_TYPES.ICE) {
+                        this.board[r][cell.col].obstacle = OBSTACLE_TYPES.NONE;
                     }
                 }
                 break;
@@ -436,8 +565,39 @@ export class GameEngine {
                             const nr = cell.row + dr;
                             const nc = cell.col + dc;
                             if (nr >= 0 && nr < this.size && nc >= 0 && nc < this.size) {
-                                if (this.board[nr][nc].type >= 0) {
+                                if (this.board[nr][nc].obstacle === OBSTACLE_TYPES.STONE) continue;
+                                if (this.board[nr][nc].type >= 0 || this.board[nr][nc].type === -2) {
                                     effects.push({ row: nr, col: nc });
+                                }
+                                if (this.board[nr][nc].obstacle === OBSTACLE_TYPES.ICE) {
+                                    this.board[nr][nc].obstacle = OBSTACLE_TYPES.NONE;
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            case SPECIAL_TYPES.RAINBOW:
+                // 万能味觉精灵被动触发：随机选一种颜色消除全场同色
+                {
+                    const types = [];
+                    for (let r = 0; r < this.size; r++) {
+                        for (let c = 0; c < this.size; c++) {
+                            if (this.board[r][c].type >= 0 && this.board[r][c].obstacle !== OBSTACLE_TYPES.STONE) {
+                                types.push(this.board[r][c].type);
+                            }
+                        }
+                    }
+                    if (types.length > 0) {
+                        const targetType = types[Math.floor(Math.random() * types.length)];
+                        for (let r = 0; r < this.size; r++) {
+                            for (let c = 0; c < this.size; c++) {
+                                if (this.board[r][c].obstacle === OBSTACLE_TYPES.STONE) continue;
+                                if (this.board[r][c].type === targetType) {
+                                    effects.push({ row: r, col: c });
+                                }
+                                if (this.board[r][c].type === targetType && this.board[r][c].obstacle === OBSTACLE_TYPES.ICE) {
+                                    this.board[r][c].obstacle = OBSTACLE_TYPES.NONE;
                                 }
                             }
                         }
@@ -446,15 +606,18 @@ export class GameEngine {
                 break;
         }
 
+        // 将新的效果格子加入removed列表（包含特殊元素信息，以便链式触发）
+        const newEffects = [];
         effects.forEach(e => {
-            const key = `${e.row},${e.col}`;
             const existing = removed.find(r => r.row === e.row && r.col === e.col);
             if (!existing) {
-                removed.push({ ...this.board[e.row][e.col], row: e.row, col: e.col });
+                const boardCell = this.board[e.row][e.col];
+                removed.push({ ...boardCell, row: e.row, col: e.col });
+                newEffects.push(e);
             }
         });
 
-        return effects;
+        return newEffects;
     }
 
     // 执行万能味觉精灵效果
@@ -462,11 +625,16 @@ export class GameEngine {
         const removed = [];
         const targetType = targetCell.type;
 
-        // 消除所有同色元素
+        // 消除所有同色元素（跳过石头）
         for (let r = 0; r < this.size; r++) {
             for (let c = 0; c < this.size; c++) {
+                if (this.board[r][c].obstacle === OBSTACLE_TYPES.STONE) continue;
                 if (this.board[r][c].type === targetType) {
                     removed.push({ ...this.board[r][c], row: r, col: c });
+                    // 破冰
+                    if (this.board[r][c].obstacle === OBSTACLE_TYPES.ICE) {
+                        this.board[r][c].obstacle = OBSTACLE_TYPES.NONE;
+                    }
                 }
             }
         }
@@ -476,58 +644,79 @@ export class GameEngine {
         return removed;
     }
 
-    // 执行组合技效果
-    executeCombo(comboType, cell1, cell2) {
+    // 执行组合技效果（positions为交换前的原始位置）
+    executeCombo(comboType, cell1, cell2, positions) {
         const removed = [];
+        // 使用原始位置（如果提供了的话），避免swap后row/col错乱
+        const pos1 = positions ? positions[0] : { row: cell1.row, col: cell1.col };
+        const pos2 = positions ? positions[1] : { row: cell2.row, col: cell2.col };
 
         switch (comboType) {
             case 'sweet_storm':
             case 'total_clear':
-                // 全屏消除所有普通元素
+            case 'dual_special':
+                // 全屏消除所有普通元素（跳过石头）
                 for (let r = 0; r < this.size; r++) {
                     for (let c = 0; c < this.size; c++) {
-                        if (this.board[r][c].type >= 0) {
+                        if (this.board[r][c].obstacle === OBSTACLE_TYPES.STONE) continue;
+                        if (this.board[r][c].type >= 0 || this.board[r][c].type === -2) {
                             removed.push({ ...this.board[r][c], row: r, col: c });
+                        }
+                        // 全屏消除也破冰
+                        if (this.board[r][c].obstacle === OBSTACLE_TYPES.ICE) {
+                            this.board[r][c].obstacle = OBSTACLE_TYPES.NONE;
                         }
                     }
                 }
                 break;
-            case 'cross_blast':
-                // 十字消除（整行+整列）
-                const cr = cell1.row, cc = cell1.col;
+            case 'cross_blast': {
+                // 十字消除（整行+整列）- 使用原始位置
+                const cr = pos1.row, cc = pos1.col;
                 for (let c = 0; c < this.size; c++) {
-                    if (this.board[cr][c].type >= 0) removed.push({ ...this.board[cr][c], row: cr, col: c });
+                    if (this.board[cr][c].obstacle === OBSTACLE_TYPES.STONE) continue;
+                    if (this.board[cr][c].type >= 0 || this.board[cr][c].type === -2) removed.push({ ...this.board[cr][c], row: cr, col: c });
+                    if (this.board[cr][c].obstacle === OBSTACLE_TYPES.ICE) this.board[cr][c].obstacle = OBSTACLE_TYPES.NONE;
                 }
                 for (let r = 0; r < this.size; r++) {
-                    if (this.board[r][cc].type >= 0 && r !== cr) removed.push({ ...this.board[r][cc], row: r, col: cc });
+                    if (this.board[r][cc].obstacle === OBSTACLE_TYPES.STONE) continue;
+                    if ((this.board[r][cc].type >= 0 || this.board[r][cc].type === -2) && r !== cr) removed.push({ ...this.board[r][cc], row: r, col: cc });
+                    if (this.board[r][cc].obstacle === OBSTACLE_TYPES.ICE) this.board[r][cc].obstacle = OBSTACLE_TYPES.NONE;
                 }
-                const cr2 = cell2.row, cc2 = cell2.col;
+                const cr2 = pos2.row, cc2 = pos2.col;
                 for (let c = 0; c < this.size; c++) {
-                    if (this.board[cr2][c].type >= 0 && !removed.find(x => x.row === cr2 && x.col === c)) {
+                    if (this.board[cr2][c].obstacle === OBSTACLE_TYPES.STONE) continue;
+                    if ((this.board[cr2][c].type >= 0 || this.board[cr2][c].type === -2) && !removed.find(x => x.row === cr2 && x.col === c)) {
                         removed.push({ ...this.board[cr2][c], row: cr2, col: c });
                     }
+                    if (this.board[cr2][c].obstacle === OBSTACLE_TYPES.ICE) this.board[cr2][c].obstacle = OBSTACLE_TYPES.NONE;
                 }
                 for (let r = 0; r < this.size; r++) {
-                    if (this.board[r][cc2].type >= 0 && !removed.find(x => x.row === r && x.col === cc2)) {
+                    if (this.board[r][cc2].obstacle === OBSTACLE_TYPES.STONE) continue;
+                    if ((this.board[r][cc2].type >= 0 || this.board[r][cc2].type === -2) && !removed.find(x => x.row === r && x.col === cc2)) {
                         removed.push({ ...this.board[r][cc2], row: r, col: cc2 });
                     }
+                    if (this.board[r][cc2].obstacle === OBSTACLE_TYPES.ICE) this.board[r][cc2].obstacle = OBSTACLE_TYPES.NONE;
                 }
                 break;
-            case 'mega_bomb':
-                // 大范围爆炸（5x5范围）
-                const mr = Math.floor((cell1.row + cell2.row) / 2);
-                const mc = Math.floor((cell1.col + cell2.col) / 2);
+            }
+            case 'mega_bomb': {
+                // 大范围爆炸（7x7范围）- 使用原始位置
+                const mr = Math.floor((pos1.row + pos2.row) / 2);
+                const mc = Math.floor((pos1.col + pos2.col) / 2);
                 for (let dr = -3; dr <= 3; dr++) {
                     for (let dc = -3; dc <= 3; dc++) {
                         const nr = mr + dr, nc = mc + dc;
                         if (nr >= 0 && nr < this.size && nc >= 0 && nc < this.size) {
-                            if (this.board[nr][nc].type >= 0) {
+                            if (this.board[nr][nc].obstacle === OBSTACLE_TYPES.STONE) continue;
+                            if (this.board[nr][nc].type >= 0 || this.board[nr][nc].type === -2) {
                                 removed.push({ ...this.board[nr][nc], row: nr, col: nc });
                             }
+                            if (this.board[nr][nc].obstacle === OBSTACLE_TYPES.ICE) this.board[nr][nc].obstacle = OBSTACLE_TYPES.NONE;
                         }
                     }
                 }
                 break;
+            }
         }
 
         return removed;
@@ -546,9 +735,12 @@ export class GameEngine {
         }
 
         for (const cell of uniqueRemoved) {
-            this.board[cell.row][cell.col] = createCell(-1);
-            this.board[cell.row][cell.col].row = cell.row;
-            this.board[cell.row][cell.col].col = cell.col;
+            // 不清除石头格子
+            if (this.board[cell.row][cell.col].obstacle === OBSTACLE_TYPES.STONE) continue;
+            const newCell = createCell(-1);
+            newCell.row = cell.row;
+            newCell.col = cell.col;
+            this.board[cell.row][cell.col] = newCell;
         }
 
         return uniqueRemoved;
@@ -576,37 +768,67 @@ export class GameEngine {
             let emptyRow = this.size - 1;
             // 从底部向上扫描
             for (let r = this.size - 1; r >= 0; r--) {
-                if (this.board[r][c].type >= 0 || this.board[r][c].type === -2) {
+                const cell = this.board[r][c];
+                // 石头不移动，跳过
+                if (cell.obstacle === OBSTACLE_TYPES.STONE) {
+                    emptyRow = r - 1; // 石头上方重新开始计算空位
+                    continue;
+                }
+                if (cell.type >= 0 || cell.type === -2) {
                     if (r !== emptyRow) {
-                        falls.push({
-                            fromRow: r, fromCol: c,
-                            toRow: emptyRow, toCol: c,
-                            cell: this.board[r][c]
-                        });
-                        this.board[emptyRow][c] = this.board[r][c];
-                        this.board[emptyRow][c].row = emptyRow;
-                        this.board[r][c] = createCell(-1);
-                        this.board[r][c].row = r;
-                        this.board[r][c].col = c;
+                        // 检查目标位置是否是石头
+                        if (this.board[emptyRow][c].obstacle === OBSTACLE_TYPES.STONE) {
+                            emptyRow--;
+                            if (r !== emptyRow && emptyRow >= 0) {
+                                falls.push({
+                                    fromRow: r, fromCol: c,
+                                    toRow: emptyRow, toCol: c,
+                                    cell: this.board[r][c]
+                                });
+                                this.board[emptyRow][c] = this.board[r][c];
+                                this.board[emptyRow][c].row = emptyRow;
+                                this.board[r][c] = createCell(-1);
+                                this.board[r][c].row = r;
+                                this.board[r][c].col = c;
+                            }
+                        } else {
+                            falls.push({
+                                fromRow: r, fromCol: c,
+                                toRow: emptyRow, toCol: c,
+                                cell: this.board[r][c]
+                            });
+                            this.board[emptyRow][c] = this.board[r][c];
+                            this.board[emptyRow][c].row = emptyRow;
+                            this.board[r][c] = createCell(-1);
+                            this.board[r][c].row = r;
+                            this.board[r][c].col = c;
+                        }
                     }
                     emptyRow--;
+                    // 跳过石头位置
+                    while (emptyRow >= 0 && this.board[emptyRow][c].obstacle === OBSTACLE_TYPES.STONE) {
+                        emptyRow--;
+                    }
                 }
             }
 
-            // 从顶部填充新元素
+            // 从顶部填充新元素（跳过石头位置）
             for (let r = emptyRow; r >= 0; r--) {
-                const type = Math.floor(Math.random() * (this.candyCount || CANDY_TYPES.length));
-                const cell = createCell(type);
-                cell.row = r;
-                cell.col = c;
-                cell.isNew = true;
-                this.board[r][c] = cell;
-                falls.push({
-                    fromRow: r - (emptyRow + 1), fromCol: c,
-                    toRow: r, toCol: c,
-                    cell: cell,
-                    isNew: true
-                });
+                if (this.board[r][c].obstacle === OBSTACLE_TYPES.STONE) continue;
+                if (this.board[r][c].type < 0 && this.board[r][c].type !== -2) {
+                    const type = Math.floor(Math.random() * (this.candyCount || CANDY_TYPES.length));
+                    const cell = createCell(type);
+                    cell.row = r;
+                    cell.col = c;
+                    cell.isNew = true;
+                    this.board[r][c] = cell;
+                    falls.push({
+                        fromRow: r - (emptyRow + 1), fromCol: c,
+                        toRow: r, toCol: c,
+                        cell: cell,
+                        isNew: true
+                    });
+                }
             }
         }
 
@@ -632,23 +854,33 @@ export class GameEngine {
     hasValidMoves() {
         for (let r = 0; r < this.size; r++) {
             for (let c = 0; c < this.size; c++) {
+                const cell = this.board[r][c];
+                // 跳过石头和冰块
+                if (cell.obstacle === OBSTACLE_TYPES.STONE || cell.obstacle === OBSTACLE_TYPES.ICE) continue;
+                if (cell.type < 0 && cell.type !== -2) continue;
                 // 尝试与右边交换
                 if (c < this.size - 1) {
-                    this.swap(r, c, r, c + 1);
-                    if (this.findAllMatches().length > 0) {
+                    const right = this.board[r][c + 1];
+                    if (right.obstacle !== OBSTACLE_TYPES.STONE && right.obstacle !== OBSTACLE_TYPES.ICE && (right.type >= 0 || right.type === -2)) {
                         this.swap(r, c, r, c + 1);
-                        return true;
+                        if (this.findAllMatches().length > 0) {
+                            this.swap(r, c, r, c + 1);
+                            return true;
+                        }
+                        this.swap(r, c, r, c + 1);
                     }
-                    this.swap(r, c, r, c + 1);
                 }
                 // 尝试与下面交换
                 if (r < this.size - 1) {
-                    this.swap(r, c, r + 1, c);
-                    if (this.findAllMatches().length > 0) {
+                    const below = this.board[r + 1][c];
+                    if (below.obstacle !== OBSTACLE_TYPES.STONE && below.obstacle !== OBSTACLE_TYPES.ICE && (below.type >= 0 || below.type === -2)) {
                         this.swap(r, c, r + 1, c);
-                        return true;
+                        if (this.findAllMatches().length > 0) {
+                            this.swap(r, c, r + 1, c);
+                            return true;
+                        }
+                        this.swap(r, c, r + 1, c);
                     }
-                    this.swap(r, c, r + 1, c);
                 }
             }
         }
@@ -659,23 +891,32 @@ export class GameEngine {
     findHint() {
         for (let r = 0; r < this.size; r++) {
             for (let c = 0; c < this.size; c++) {
+                const cell = this.board[r][c];
+                if (cell.obstacle === OBSTACLE_TYPES.STONE || cell.obstacle === OBSTACLE_TYPES.ICE) continue;
+                if (cell.type < 0 && cell.type !== -2) continue;
                 // 尝试与右边交换
                 if (c < this.size - 1) {
-                    this.swap(r, c, r, c + 1);
-                    if (this.findAllMatches().length > 0) {
+                    const right = this.board[r][c + 1];
+                    if (right.obstacle !== OBSTACLE_TYPES.STONE && right.obstacle !== OBSTACLE_TYPES.ICE && (right.type >= 0 || right.type === -2)) {
                         this.swap(r, c, r, c + 1);
-                        return { r1: r, c1: c, r2: r, c2: c + 1 };
+                        if (this.findAllMatches().length > 0) {
+                            this.swap(r, c, r, c + 1);
+                            return { r1: r, c1: c, r2: r, c2: c + 1 };
+                        }
+                        this.swap(r, c, r, c + 1);
                     }
-                    this.swap(r, c, r, c + 1);
                 }
                 // 尝试与下面交换
                 if (r < this.size - 1) {
-                    this.swap(r, c, r + 1, c);
-                    if (this.findAllMatches().length > 0) {
+                    const below = this.board[r + 1][c];
+                    if (below.obstacle !== OBSTACLE_TYPES.STONE && below.obstacle !== OBSTACLE_TYPES.ICE && (below.type >= 0 || below.type === -2)) {
                         this.swap(r, c, r + 1, c);
-                        return { r1: r, c1: c, r2: r + 1, c2: c };
+                        if (this.findAllMatches().length > 0) {
+                            this.swap(r, c, r + 1, c);
+                            return { r1: r, c1: c, r2: r + 1, c2: c };
+                        }
+                        this.swap(r, c, r + 1, c);
                     }
-                    this.swap(r, c, r + 1, c);
                 }
             }
         }
@@ -687,7 +928,7 @@ export class GameEngine {
         const cells = [];
         for (let r = 0; r < this.size; r++) {
             for (let c = 0; c < this.size; c++) {
-                if (this.board[r][c].type >= 0) {
+                if (this.board[r][c].type >= 0 && this.board[r][c].obstacle === OBSTACLE_TYPES.NONE) {
                     cells.push(this.board[r][c].type);
                 }
             }
@@ -700,7 +941,7 @@ export class GameEngine {
         let idx = 0;
         for (let r = 0; r < this.size; r++) {
             for (let c = 0; c < this.size; c++) {
-                if (this.board[r][c].type >= 0) {
+                if (this.board[r][c].type >= 0 && this.board[r][c].obstacle === OBSTACLE_TYPES.NONE) {
                     this.board[r][c].type = cells[idx++];
                     this.board[r][c].special = SPECIAL_TYPES.NONE;
                 }

@@ -92,9 +92,26 @@ body { background: #fce4ec; }
 .level-star.earned { opacity: 1; }
 .level-lock-icon { font-size: 28px; }
 
+/* 赛区标题 */
+.zone-title {
+    grid-column: 1 / -1;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 800;
+    color: #7b1fa2;
+    padding: 8px 0 4px;
+    border-bottom: 2px dashed rgba(123, 31, 162, 0.2);
+    margin-bottom: 4px;
+}
+
+/* 障碍物关卡标记 */
+.level-node.has-obstacle.unlocked { border-color: #64b5f6; }
+.level-node.has-obstacle.cleared { border-color: #4caf50; }
+.level-obstacle-icon { font-size: 12px; position: absolute; top: 4px; right: 4px; }
+
 /* ===== 游戏界面 ===== */
 #game-screen { flex-direction: column; background: linear-gradient(180deg, #f8bbd0, #f48fb1, #ec407a); }
-.game-container { width: 100%; max-width: 480px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; padding: 8px; }
+.game-container { width: 100%; max-width: 480px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; padding: 4px; }
 .game-hud { display: flex; align-items: center; padding: 8px; gap: 8px; z-index: 10; }
 .hud-left, .hud-right { display: flex; align-items: center; gap: 8px; }
 .hud-btn { background: rgba(255,255,255,0.15); border: none; border-radius: 12px; width: 44px; height: 44px; font-size: 20px; cursor: pointer; color: white; display: flex; align-items: center; justify-content: center; }

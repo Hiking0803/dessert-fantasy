@@ -248,6 +248,8 @@ export class PlayerManager {
         if (cleared >= 5 && !this.data.achievements.includes('clear_5')) newAchievements.push('clear_5');
         if (cleared >= 10 && !this.data.achievements.includes('clear_10')) newAchievements.push('clear_10');
         if (cleared >= 15 && !this.data.achievements.includes('clear_15')) newAchievements.push('clear_15');
+        if (cleared >= 20 && !this.data.achievements.includes('clear_20')) newAchievements.push('clear_20');
+        if (cleared >= 30 && !this.data.achievements.includes('clear_30')) newAchievements.push('clear_30');
         // 星星
         if (this.getTotalStars() >= 30 && !this.data.achievements.includes('star_hunter')) {
             newAchievements.push('star_hunter');

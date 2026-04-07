@@ -1,5 +1,5 @@
 // 主入口 - 整合所有模块、初始化游戏
-import { GameEngine, CANDY_TYPES, SPECIAL_TYPES, BOARD_SIZE, getBoardSizeForLevel } from './engine.js';
+import { GameEngine, CANDY_TYPES, SPECIAL_TYPES, OBSTACLE_TYPES, BOARD_SIZE, getBoardSizeForLevel } from './engine.js';
 import { GameRenderer } from './renderer.js';
 import { LEVEL_DATA, ACHIEVEMENTS, TITLES, getCurrentTitle } from './levels.js';
 import { PlayerManager } from './player.js';
@@ -228,7 +228,27 @@ function renderLevelMap() {
 
     let totalStars = 0;
 
+    // 赛区定义
+    const zones = [
+        { name: '🌸 新手入门', range: [1, 3] },
+        { name: '🔥 中级挑战', range: [4, 9] },
+        { name: '⚡ 高级挑战', range: [10, 15] },
+        { name: '🧊 障碍挑战', range: [16, 22] },
+        { name: '👑 极限挑战', range: [23, 30] },
+    ];
+
+    let currentZoneIdx = 0;
+
     LEVEL_DATA.forEach((level, idx) => {
+        // 检查是否需要插入赛区标题
+        if (currentZoneIdx < zones.length && level.id === zones[currentZoneIdx].range[0]) {
+            const zoneTitle = document.createElement('div');
+            zoneTitle.className = 'zone-title';
+            zoneTitle.textContent = zones[currentZoneIdx].name;
+            map.appendChild(zoneTitle);
+            currentZoneIdx++;
+        }
+
         const cleared = player.data.levelsCleared[String(level.id)];
         const prevCleared = idx === 0 || player.data.levelsCleared[String(LEVEL_DATA[idx - 1].id)]?.cleared;
         const isUnlocked = idx === 0 || prevCleared;
@@ -236,11 +256,14 @@ function renderLevelMap() {
         totalStars += stars;
 
         const node = document.createElement('div');
-        node.className = `level-node ${cleared?.cleared ? 'cleared' : isUnlocked ? 'unlocked' : 'locked'} ${level.isBoss ? 'boss' : ''}`;
+        node.className = `level-node ${cleared?.cleared ? 'cleared' : isUnlocked ? 'unlocked' : 'locked'} ${level.isBoss ? 'boss' : ''} ${level.obstacles ? 'has-obstacle' : ''}`;
 
         if (isUnlocked) {
+            const obstacleIcons = level.obstacles ? 
+                (level.obstacles.ice ? '🧊' : '') + (level.obstacles.stone ? '🪨' : '') : '';
             node.innerHTML = `
                 <div class="level-num">${level.isBoss ? '👑' : level.id}</div>
+                ${obstacleIcons ? `<div class="level-obstacle-icon">${obstacleIcons}</div>` : ''}
                 <div class="level-stars">
                     ${[1, 2, 3].map(s => `<span class="level-star ${s <= stars ? 'earned' : ''}">⭐</span>`).join('')}
                 </div>
@@ -352,6 +375,8 @@ function onPointerDown(e) {
 
     const boardCell = engine.getCell(cell.row, cell.col);
     if (!boardCell || (boardCell.type < 0 && boardCell.type !== -2)) return;
+    // 不可点击石头和冰块
+    if (boardCell.obstacle === OBSTACLE_TYPES.STONE || boardCell.obstacle === OBSTACLE_TYPES.ICE) return;
 
     const now = Date.now();
     const isDoubleClick = lastClickCell && lastClickCell.row === cell.row && lastClickCell.col === cell.col && (now - lastClickTime) < 400;
@@ -458,14 +483,17 @@ async function attemptSwap(r1, c1, r2, c2) {
     await animateSwap(r1, c1, r2, c2, 150);
 
     if (result.type === 'combo') {
-        // 组合技
+        // 组合技 - 显示终极一击过场动画
         usedSweetStorm = true;
+        const cw = renderer.canvas.width / (window.devicePixelRatio || 1);
+        const ch = renderer.canvas.height / (window.devicePixelRatio || 1);
+        renderer.showUltimateEffect(cw, ch);
         audio.playSweetStorm();
         renderer.spawnSweetStormParticles();
         renderer.shake(10);
-        await sleep(300);
+        await sleep(800); // 等待过场动画展示
 
-        const removed = engine.executeCombo(result.combo, result.cells[0], result.cells[1]);
+        const removed = engine.executeCombo(result.combo, result.cells[0], result.cells[1], result.positions);
         const score = removed.length * 30;
         engine.score += score;
         await animateRemoval(removed);
@@ -548,6 +576,14 @@ async function processMatches(matches, swapPos) {
     // 消除动画
     await animateRemoval(removed);
 
+    // 破冰粒子效果
+    if (removed.iceBroken && removed.iceBroken.length > 0) {
+        for (const ice of removed.iceBroken) {
+            renderer.spawnRemoveParticles(ice.row, ice.col, '#64b5f6', 8);
+            renderer.addFloatingText('🧊', renderer.getCellPos(ice.row, ice.col).x, renderer.getCellPos(ice.row, ice.col).y, '#29b6f6', 16);
+        }
+    }
+
     // 清除格子
     engine.clearCells(removed);
 
@@ -591,6 +627,13 @@ async function processCascade() {
 
         await animateRemoval(removed);
         engine.clearCells(removed);
+
+        // 破冰粒子效果
+        if (removed.iceBroken && removed.iceBroken.length > 0) {
+            for (const ice of removed.iceBroken) {
+                renderer.spawnRemoveParticles(ice.row, ice.col, '#64b5f6', 8);
+            }
+        }
 
         if (specials.length > 0) {
             engine.placeSpecials(specials);
@@ -642,7 +685,7 @@ function animateRemoval(removed) {
         const duration = 250;
         const startTime = performance.now();
 
-        // 生成粒子
+        // 生成粒子（包括被动消除的特殊元素也播放特效）
         removed.forEach(cell => {
             const color = CANDY_TYPES[cell.type]?.color || '#ffd700';
             renderer.spawnRemoveParticles(cell.row, cell.col, color, 6);
@@ -655,6 +698,10 @@ function animateRemoval(removed) {
                 audio.playBombBlast();
                 renderer.spawnSpecialParticles(cell.row, cell.col, 'bomb');
                 renderer.shake(5);
+            } else if (cell.special === SPECIAL_TYPES.RAINBOW) {
+                audio.playRainbow();
+                renderer.spawnSpecialParticles(cell.row, cell.col, 'sweet_storm');
+                renderer.shake(4);
             }
         });
 
@@ -1254,7 +1301,7 @@ function addSignature() {
 
 // ===== 玩法介绍 =====
 let tutorialPage = 0;
-const TUTORIAL_TOTAL_PAGES = 4;
+const TUTORIAL_TOTAL_PAGES = 5;
 
 function showTutorial() {
     tutorialPage = 0;
@@ -1331,6 +1378,7 @@ async function activateSpecialByClick(row, col) {
         renderer.spawnSpecialParticles(row, col, 'line');
         renderer.shake(3);
         for (let c = 0; c < engine.size; c++) {
+            if (engine.board[row][c].obstacle === OBSTACLE_TYPES.STONE) continue;
             if (engine.board[row][c].type >= 0 || engine.board[row][c].type === -2) {
                 if (c !== col) {
                     removed.push({ ...engine.board[row][c], row, col: c });
@@ -1340,12 +1388,17 @@ async function activateSpecialByClick(row, col) {
                     }
                 }
             }
+            // 破冰
+            if (engine.board[row][c].obstacle === OBSTACLE_TYPES.ICE) {
+                engine.board[row][c].obstacle = OBSTACLE_TYPES.NONE;
+            }
         }
     } else if (cell.special === SPECIAL_TYPES.LINE_V) {
         audio.playLineBlast();
         renderer.spawnSpecialParticles(row, col, 'line');
         renderer.shake(3);
         for (let r = 0; r < engine.size; r++) {
+            if (engine.board[r][col].obstacle === OBSTACLE_TYPES.STONE) continue;
             if (engine.board[r][col].type >= 0 || engine.board[r][col].type === -2) {
                 if (r !== row) {
                     removed.push({ ...engine.board[r][col], row: r, col });
@@ -1354,6 +1407,9 @@ async function activateSpecialByClick(row, col) {
                         chainSpecialCell = { row: r, col, special: engine.board[r][col].special };
                     }
                 }
+            }
+            if (engine.board[r][col].obstacle === OBSTACLE_TYPES.ICE) {
+                engine.board[r][col].obstacle = OBSTACLE_TYPES.NONE;
             }
         }
     } else if (cell.special === SPECIAL_TYPES.BOMB) {
@@ -1365,12 +1421,16 @@ async function activateSpecialByClick(row, col) {
                 if (Math.abs(dr) + Math.abs(dc) <= 2) {
                     const nr = row + dr, nc = col + dc;
                     if (nr >= 0 && nr < engine.size && nc >= 0 && nc < engine.size) {
+                        if (engine.board[nr][nc].obstacle === OBSTACLE_TYPES.STONE) continue;
                         if ((nr !== row || nc !== col) && (engine.board[nr][nc].type >= 0 || engine.board[nr][nc].type === -2)) {
                             removed.push({ ...engine.board[nr][nc], row: nr, col: nc });
                             if (engine.board[nr][nc].special !== SPECIAL_TYPES.NONE && !hasChainSpecial) {
                                 hasChainSpecial = true;
                                 chainSpecialCell = { row: nr, col: nc, special: engine.board[nr][nc].special };
                             }
+                        }
+                        if (engine.board[nr][nc].obstacle === OBSTACLE_TYPES.ICE) {
+                            engine.board[nr][nc].obstacle = OBSTACLE_TYPES.NONE;
                         }
                     }
                 }
@@ -1382,13 +1442,14 @@ async function activateSpecialByClick(row, col) {
         const types = [];
         for (let r = 0; r < engine.size; r++) {
             for (let c = 0; c < engine.size; c++) {
-                if (engine.board[r][c].type >= 0) types.push(engine.board[r][c].type);
+                if (engine.board[r][c].type >= 0 && engine.board[r][c].obstacle !== OBSTACLE_TYPES.STONE) types.push(engine.board[r][c].type);
             }
         }
         if (types.length > 0) {
             const targetType = types[Math.floor(Math.random() * types.length)];
             for (let r = 0; r < engine.size; r++) {
                 for (let c = 0; c < engine.size; c++) {
+                    if (engine.board[r][c].obstacle === OBSTACLE_TYPES.STONE) continue;
                     if (engine.board[r][c].type === targetType) {
                         removed.push({ ...engine.board[r][c], row: r, col: c });
                         if (engine.board[r][c].special !== SPECIAL_TYPES.NONE && !hasChainSpecial) {
@@ -1404,16 +1465,26 @@ async function activateSpecialByClick(row, col) {
     // 如果爆炸范围内有其他特殊元素，触发甜蜜风暴（终极效果）
     if (hasChainSpecial && chainSpecialCell) {
         usedSweetStorm = true;
+        // 显示终极一击过场动画
+        const cw = renderer.canvas.width / (window.devicePixelRatio || 1);
+        const ch = renderer.canvas.height / (window.devicePixelRatio || 1);
+        renderer.showUltimateEffect(cw, ch);
         audio.playSweetStorm();
         renderer.spawnSweetStormParticles();
         renderer.shake(10);
-        // 全屏消除
+        await sleep(800); // 等待过场动画展示
+        // 全屏消除（跳过石头）
         for (let r = 0; r < engine.size; r++) {
             for (let c = 0; c < engine.size; c++) {
+                if (engine.board[r][c].obstacle === OBSTACLE_TYPES.STONE) continue;
                 if (engine.board[r][c].type >= 0 || engine.board[r][c].type === -2) {
                     if (!removed.find(x => x.row === r && x.col === c)) {
                         removed.push({ ...engine.board[r][c], row: r, col: c });
                     }
+                }
+                // 全屏消除也破冰
+                if (engine.board[r][c].obstacle === OBSTACLE_TYPES.ICE) {
+                    engine.board[r][c].obstacle = OBSTACLE_TYPES.NONE;
                 }
             }
         }
